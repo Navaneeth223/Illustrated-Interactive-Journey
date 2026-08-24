@@ -1,0 +1,122 @@
+{
+  "segments": [
+    {
+      "id": "seg-01-departure",
+      "index": 0,
+      "role": "departure",
+      "widthPx": 2400,
+      "layers": {
+        "background": "assets/seg01/bg.webp",
+        "midground": "assets/seg01/mg.webp",
+        "foreground": "assets/seg01/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg01.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0
+    },
+    {
+      "id": "seg-02-intermediate",
+      "index": 1,
+      "role": "intermediate",
+      "widthPx": 2400,
+      "layers": {
+        "background": "assets/seg02/bg.webp",
+        "midground": "assets/seg02/mg.webp",
+        "foreground": "assets/seg02/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg02.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0
+    },
+    {
+      "id": "seg-03-intermediate",
+      "index": 2,
+      "role": "intermediate",
+      "widthPx": 2400,
+      "layers": {
+        "background": "assets/seg03/bg.webp",
+        "midground": "assets/seg03/mg.webp",
+        "foreground": "assets/seg03/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg03.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0
+    },
+    {
+      "id": "seg-04-intermediate",
+      "index": 3,
+      "role": "intermediate",
+      "widthPx": 2400,
+      "layers": {
+        "background": "assets/seg04/bg.webp",
+        "midground": "assets/seg04/mg.webp",
+        "foreground": "assets/seg04/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg04.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0
+    },
+    {
+      "id": "seg-05-intermediate",
+      "index": 4,
+      "role": "intermediate",
+      "widthPx": 2400,
+      "layers": {
+        "background": "assets/seg05/bg.webp",
+        "midground": "assets/seg05/mg.webp",
+        "foreground": "assets/seg05/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg05.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0
+    },
+    {
+      "id": "seg-06-intermediate",
+      "index": 5,
+      "role": "intermediate",
+      "widthPx": 2400,
+      "layers": {
+        "background": "assets/seg06/bg.webp",
+        "midground": "assets/seg06/mg.webp",
+        "foreground": "assets/seg06/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg06.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0
+    },
+    {
+      "id": "seg-07-intermediate",
+      "index": 6,
+      "role": "intermediate",
+      "widthPx": 2400,
+      "layers": {
+        "background": "assets/seg07/bg.webp",
+        "midground": "assets/seg07/mg.webp",
+        "foreground": "assets/seg07/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg07.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0
+    },
+    {
+      "id": "seg-08-arrival",
+      "index": 7,
+      "role": "arrival",
+      "widthPx": 2400,
+      "layers": {
+        "background": "assets/seg08/bg.webp",
+        "midground": "assets/seg08/mg.webp",
+        "foreground": "assets/seg08/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg08.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0
+    }
+  ],
+  "maxVelocity": 800,
+  "accelerationDuration": 1.2,
+  "decelerationDuration": 1.8,
+  "idleVolume": 0.25,
+  "motionVolume": 1.0,
+  "crossfadeDuration": 1.5
+}
