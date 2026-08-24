@@ -1,10 +1,10 @@
 {
   "segments": [
     {
-      "id": "seg-01-departure",
+      "id": "seg-01-home",
       "index": 0,
       "role": "departure",
-      "widthPx": 2400,
+      "widthPx": 3200,
       "layers": {
         "background": "assets/seg01/bg.webp",
         "midground": "assets/seg01/mg.webp",
@@ -12,13 +12,14 @@
       },
       "audioTrack": "assets/audio/seg01.mp3",
       "edgeMatchOffsetLeft": 0,
-      "edgeMatchOffsetRight": 0
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.72
     },
     {
-      "id": "seg-02-intermediate",
+      "id": "seg-02-open-road",
       "index": 1,
       "role": "intermediate",
-      "widthPx": 2400,
+      "widthPx": 3200,
       "layers": {
         "background": "assets/seg02/bg.webp",
         "midground": "assets/seg02/mg.webp",
@@ -26,13 +27,14 @@
       },
       "audioTrack": "assets/audio/seg02.mp3",
       "edgeMatchOffsetLeft": 0,
-      "edgeMatchOffsetRight": 0
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.70
     },
     {
-      "id": "seg-03-intermediate",
+      "id": "seg-03-mountains",
       "index": 2,
       "role": "intermediate",
-      "widthPx": 2400,
+      "widthPx": 3200,
       "layers": {
         "background": "assets/seg03/bg.webp",
         "midground": "assets/seg03/mg.webp",
@@ -40,13 +42,14 @@
       },
       "audioTrack": "assets/audio/seg03.mp3",
       "edgeMatchOffsetLeft": 0,
-      "edgeMatchOffsetRight": 0
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.68
     },
     {
-      "id": "seg-04-intermediate",
+      "id": "seg-04-summit",
       "index": 3,
       "role": "intermediate",
-      "widthPx": 2400,
+      "widthPx": 3200,
       "layers": {
         "background": "assets/seg04/bg.webp",
         "midground": "assets/seg04/mg.webp",
@@ -54,13 +57,14 @@
       },
       "audioTrack": "assets/audio/seg04.mp3",
       "edgeMatchOffsetLeft": 0,
-      "edgeMatchOffsetRight": 0
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.65
     },
     {
-      "id": "seg-05-intermediate",
+      "id": "seg-05-village-beautiful",
       "index": 4,
       "role": "intermediate",
-      "widthPx": 2400,
+      "widthPx": 2800,
       "layers": {
         "background": "assets/seg05/bg.webp",
         "midground": "assets/seg05/mg.webp",
@@ -68,13 +72,14 @@
       },
       "audioTrack": "assets/audio/seg05.mp3",
       "edgeMatchOffsetLeft": 0,
-      "edgeMatchOffsetRight": 0
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.72
     },
     {
-      "id": "seg-06-intermediate",
+      "id": "seg-06-village-broken",
       "index": 5,
       "role": "intermediate",
-      "widthPx": 2400,
+      "widthPx": 2800,
       "layers": {
         "background": "assets/seg06/bg.webp",
         "midground": "assets/seg06/mg.webp",
@@ -82,10 +87,11 @@
       },
       "audioTrack": "assets/audio/seg06.mp3",
       "edgeMatchOffsetLeft": 0,
-      "edgeMatchOffsetRight": 0
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.73
     },
     {
-      "id": "seg-07-intermediate",
+      "id": "seg-07-boatyard",
       "index": 6,
       "role": "intermediate",
       "widthPx": 2400,
@@ -96,13 +102,14 @@
       },
       "audioTrack": "assets/audio/seg07.mp3",
       "edgeMatchOffsetLeft": 0,
-      "edgeMatchOffsetRight": 0
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.74
     },
     {
-      "id": "seg-08-arrival",
+      "id": "seg-08-water-crossing",
       "index": 7,
-      "role": "arrival",
-      "widthPx": 2400,
+      "role": "intermediate",
+      "widthPx": 3200,
       "layers": {
         "background": "assets/seg08/bg.webp",
         "midground": "assets/seg08/mg.webp",
@@ -110,7 +117,83 @@
       },
       "audioTrack": "assets/audio/seg08.mp3",
       "edgeMatchOffsetLeft": 0,
-      "edgeMatchOffsetRight": 0
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.75
+    },
+    {
+      "id": "seg-09-other-shore",
+      "index": 8,
+      "role": "intermediate",
+      "widthPx": 2400,
+      "layers": {
+        "background": "assets/seg09/bg.webp",
+        "midground": "assets/seg09/mg.webp",
+        "foreground": "assets/seg09/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg09.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.72
+    },
+    {
+      "id": "seg-10-train-stop",
+      "index": 9,
+      "role": "intermediate",
+      "widthPx": 2400,
+      "layers": {
+        "background": "assets/seg10/bg.webp",
+        "midground": "assets/seg10/mg.webp",
+        "foreground": "assets/seg10/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg10.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.71
+    },
+    {
+      "id": "seg-11-canyon",
+      "index": 10,
+      "role": "intermediate",
+      "widthPx": 3200,
+      "layers": {
+        "background": "assets/seg11/bg.webp",
+        "midground": "assets/seg11/mg.webp",
+        "foreground": "assets/seg11/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg11.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.76
+    },
+    {
+      "id": "seg-12-new-city",
+      "index": 11,
+      "role": "intermediate",
+      "widthPx": 3200,
+      "layers": {
+        "background": "assets/seg12/bg.webp",
+        "midground": "assets/seg12/mg.webp",
+        "foreground": "assets/seg12/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg12.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.70
+    },
+    {
+      "id": "seg-13-park",
+      "index": 12,
+      "role": "arrival",
+      "widthPx": 2400,
+      "layers": {
+        "background": "assets/seg13/bg.webp",
+        "midground": "assets/seg13/mg.webp",
+        "foreground": "assets/seg13/fg.webp"
+      },
+      "audioTrack": "assets/audio/seg13.mp3",
+      "edgeMatchOffsetLeft": 0,
+      "edgeMatchOffsetRight": 0,
+      "groundLineRatio": 0.72
     }
   ],
   "maxVelocity": 800,
