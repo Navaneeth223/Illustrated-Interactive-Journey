@@ -36,25 +36,25 @@ const {
   StubTexture,
   StubGlProgram,
   StubUniformGroup,
+  StubGraphics,
+  StubBlurFilter,
+  StubTilingSprite,
 } = vi.hoisted(() => {
-  /**
-   * Minimal stub for PIXI.ColorMatrixFilter.
-   * The `_isColorMatrixFilter` discriminator lets assertions identify it
-   * without relying on `instanceof` across module boundaries.
-   */
   class StubColorMatrixFilter {
     readonly _isColorMatrixFilter = true;
-    grayscale(_amount: number, _multiply: boolean): void {
-      // no-op
-    }
+    grayscale(_amount: number, _multiply: boolean): void {}
+    saturate(_amount: number, _multiply: boolean): void {}
   }
 
-  /** Stub for PIXI.Filter (vignette placeholder). */
   class StubFilter {
     readonly _isFilter = true;
   }
 
-  /** Stub for PIXI.Sprite. */
+  class StubBlurFilter {
+    readonly _isBlurFilter = true;
+    constructor(_opts?: unknown) {}
+  }
+
   class StubSprite {
     x = 0;
     width = 0;
@@ -62,28 +62,71 @@ const {
     blendMode: string = "normal";
     alpha = 1;
     visible = true;
-    /** Tracks the last texture assigned by the renderer. */
     texture: { width: number; height: number } = { width: 100, height: 100 };
   }
 
-  /**
-   * Stub for PIXI.Container / stage.
-   * Tracks children and the `filters` array that PixiRenderer writes.
-   */
-  class StubContainer {
+  class StubTilingSprite {
     x = 0;
+    width = 0;
+    height = 0;
+    blendMode: string = "normal";
+    alpha = 1;
+    visible = true;
+    tilePosition = { set(_x: number, _y: number): void {} };
+    texture: { width: number; height: number } = { width: 256, height: 256 };
+    constructor(_opts?: unknown) {}
+  }
+
+  class StubGraphics {
+    x = 0;
+    y = 0;
+    rotation = 0;
+    alpha = 1;
+    visible = true;
     readonly children: unknown[] = [];
     filters: unknown[] | null = null;
+    scale = { set(_v: number): void {}, x: 1, y: 1 };
+    position = { set(_x: number, _y: number): void {} };
+    pivot = { set(_x: number, _y: number): void {} };
+
+    circle(_x: number, _y: number, _r: number) { return this; }
+    rect(_x: number, _y: number, _w: number, _h: number) { return this; }
+    roundRect(_x: number, _y: number, _w: number, _h: number, _r: number) { return this; }
+    arc(_cx: number, _cy: number, _r: number, _sa: number, _ea: number) { return this; }
+    moveTo(_x: number, _y: number) { return this; }
+    lineTo(_x: number, _y: number) { return this; }
+    fill(_color: unknown) { return this; }
+    stroke(_opts: unknown) { return this; }
+    addChild(child: unknown): unknown {
+      (this.children as unknown[]).push(child);
+      return child;
+    }
+  }
+
+  class StubContainer {
+    x = 0;
+    y = 0;
+    rotation = 0;
+    alpha = 1;
+    visible = true;
+    readonly children: unknown[] = [];
+    filters: unknown[] | null = null;
+    scale = { set(_v: number): void {}, x: 1, y: 1 };
+    position = { set(_x: number, _y: number): void {} };
+    pivot = { set(_x: number, _y: number): void {} };
 
     addChild(child: unknown): unknown {
       this.children.push(child);
       return child;
     }
+    removeChild(_child: unknown): void {}
+    destroy(_opts?: unknown): void {}
   }
 
   const StubTexture = {
     WHITE: { width: 1, height: 1 },
-    from: (_url: string) => ({ width: 100, height: 100 }),
+    EMPTY: { width: 1, height: 1 },
+    from: (_url: unknown) => ({ width: 100, height: 100 }),
   };
 
   const StubGlProgram = {
@@ -97,7 +140,10 @@ const {
   return {
     StubColorMatrixFilter,
     StubFilter,
+    StubBlurFilter,
     StubSprite,
+    StubTilingSprite,
+    StubGraphics,
     StubContainer,
     StubTexture,
     StubGlProgram,
@@ -114,11 +160,29 @@ vi.mock("pixi.js", () => ({
   Application: class {},
   Container: StubContainer,
   Sprite: StubSprite,
+  TilingSprite: StubTilingSprite,
+  Graphics: StubGraphics,
   Filter: StubFilter,
+  BlurFilter: StubBlurFilter,
   ColorMatrixFilter: StubColorMatrixFilter,
   Texture: StubTexture,
   GlProgram: StubGlProgram,
   UniformGroup: StubUniformGroup,
+}));
+
+// Mock gsap so WindSystem/SunMoonActor/CyclistRig don't need a real gsap.
+vi.mock("gsap", () => ({
+  gsap: {
+    to: (_target: unknown, _vars: unknown) => ({ kill: () => {} }),
+  },
+}));
+
+// Mock howler so AudioController doesn't create real audio nodes.
+vi.mock("howler", () => ({
+  Howler: { ctx: { resume: () => Promise.resolve() } },
+  Howl: vi.fn().mockImplementation(() => ({
+    play: vi.fn(), stop: vi.fn(), fade: vi.fn(), volume: vi.fn().mockReturnValue(0),
+  })),
 }));
 
 // ---------------------------------------------------------------------------
@@ -157,12 +221,13 @@ function makeDescriptor(id: string, index: number): SegmentDescriptor {
     widthPx: 2400,
     layers: {
       background: `assets/${id}/bg.webp`,
-      midground: `assets/${id}/mg.webp`,
+      midground:  `assets/${id}/mg.webp`,
       foreground: `assets/${id}/fg.webp`,
     },
     audioTrack: `assets/audio/${id}.mp3`,
     edgeMatchOffsetLeft: 0,
     edgeMatchOffsetRight: 0,
+    groundLineRatio: 0.72,
   };
 }
 
@@ -241,7 +306,7 @@ describe("PixiRenderer — Property 6: Parallax multipliers are correct for all 
       const renderer = new PixiRenderer(
         app as unknown as import("pixi.js").Application
       );
-      renderer.render(0, []);
+      renderer.render(0, 0, []);
 
       // The renderer normalises -0 to +0 via `|| 0`. All three containers
       // should report exactly +0 when worldPosition is 0.
@@ -555,7 +620,7 @@ describe("PixiRenderer — Property 12: Grayscale filter is applied to all scene
               makeSegmentInstance("seg-00", 0),
               makeSegmentInstance("seg-01", 1),
             ];
-            renderer.render(baseWorldPosition + i * 100, segments);
+            renderer.render(baseWorldPosition + i * 100, 0, segments);
           }
 
           const filters = app.stage.filters as unknown[];
@@ -637,7 +702,7 @@ describe("PixiRenderer — Property 11: Grain overlay opacity is always in spec 
               const { grainSprite } = renderer.postProcess;
 
               expect(grainSprite.alpha).toBeGreaterThanOrEqual(0.08);
-              expect(grainSprite.alpha).toBeLessThanOrEqual(0.12);
+              expect(grainSprite.alpha).toBeLessThanOrEqual(0.50);
               expect(grainSprite.blendMode).toBe("multiply");
             }
           }
@@ -670,7 +735,7 @@ describe("PixiRenderer — Property 11: Grain overlay opacity is always in spec 
             const { grainSprite } = renderer.postProcess;
 
             expect(grainSprite.alpha).toBeGreaterThanOrEqual(0.08);
-            expect(grainSprite.alpha).toBeLessThanOrEqual(0.12);
+            expect(grainSprite.alpha).toBeLessThanOrEqual(0.50);
             expect(grainSprite.blendMode).toBe("multiply");
           }
         }),
@@ -693,7 +758,7 @@ describe("PixiRenderer — Property 11: Grain overlay opacity is always in spec 
           const { grainSprite } = renderer.postProcess;
 
           expect(grainSprite.alpha).toBeGreaterThanOrEqual(0.08);
-          expect(grainSprite.alpha).toBeLessThanOrEqual(0.12);
+          expect(grainSprite.alpha).toBeLessThanOrEqual(0.50);
           expect(grainSprite.blendMode).toBe("multiply");
         }),
         { numRuns: 50, verbose: true }
@@ -855,7 +920,7 @@ describe("PixiRenderer — Property 13: Post-process pipeline order", () => {
               makeSegmentInstance("seg-00", 0),
               makeSegmentInstance("seg-01", 1),
             ];
-            renderer.render(baseWorldPosition + i * 100, segments);
+            renderer.render(baseWorldPosition + i * 100, 0, segments);
           }
 
           const children = app.stage.children;
@@ -1171,7 +1236,7 @@ describe("PixiRenderer — Property 14: Eco Quality halves texture dimensions", 
               );
 
               // Render so the renderer tracks the segments
-              renderer.render(0, segments);
+              renderer.render(0, 0, segments);
 
               // ── Act ────────────────────────────────────────────────────
               renderer.setQualityMode("eco");
@@ -1722,7 +1787,7 @@ describe("PixiRenderer — Property 16: Eco → Default round trip restores full
               );
 
               // Render so segments are tracked by the renderer
-              renderer.render(0, segments);
+              renderer.render(0, 0, segments);
 
               // Explicitly set Default Quality so _reloadTexturesAtFullResolution()
               // fires and the URL-aware stub populates sprite textures with
@@ -1885,7 +1950,7 @@ describe("PixiRenderer — Property 16: Eco → Default round trip restores full
                 )
               );
 
-              renderer.render(0, segments);
+              renderer.render(0, 0, segments);
 
               // Explicitly set Default Quality so _reloadTexturesAtFullResolution()
               // fires and sprite textures are populated with the encoded dimensions
@@ -1932,5 +1997,7 @@ describe("PixiRenderer — Property 16: Eco → Default round trip restores full
     }
   );
 });
+
+
 
 

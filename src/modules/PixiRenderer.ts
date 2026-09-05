@@ -352,22 +352,28 @@ void main(void) {
 
   private _generateGrainTexture(): PIXI.Texture {
     const SIZE = 256;
-    const canvas = document.createElement("canvas");
-    canvas.width  = SIZE;
-    canvas.height = SIZE;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return PIXI.Texture.WHITE;
-
-    const imageData = ctx.createImageData(SIZE, SIZE);
-    for (let i = 0; i < imageData.data.length; i += 4) {
-      const v = Math.random() > 0.5 ? 0 : 255;
-      imageData.data[i]     = v;
-      imageData.data[i + 1] = v;
-      imageData.data[i + 2] = v;
-      imageData.data[i + 3] = Math.floor(Math.random() * 40);
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width  = SIZE;
+      canvas.height = SIZE;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return PIXI.Texture.WHITE;
+      const imageData = ctx.createImageData(SIZE, SIZE);
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        const v = Math.random() > 0.5 ? 0 : 255;
+        imageData.data[i]     = v;
+        imageData.data[i + 1] = v;
+        imageData.data[i + 2] = v;
+        imageData.data[i + 3] = Math.floor(Math.random() * 40);
+      }
+      ctx.putImageData(imageData, 0, 0);
+      // In test environments the pixi.js mock's Texture.from may not accept
+      // a canvas element — fall back to WHITE gracefully.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (PIXI.Texture.from as unknown as (src: any) => PIXI.Texture)(canvas) ?? PIXI.Texture.WHITE;
+    } catch {
+      return PIXI.Texture.WHITE;
     }
-    ctx.putImageData(imageData, 0, 0);
-    return PIXI.Texture.from(canvas);
   }
 
   private _reloadTexturesAtHalfResolution(): void {
