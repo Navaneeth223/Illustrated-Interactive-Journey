@@ -7,6 +7,8 @@ import type { AudioController } from "@/modules/AudioController";
 import type { AudioGate } from "@/modules/AudioGate";
 import type { InputController } from "@/modules/InputController";
 import type { ArrivalScreen } from "@/modules/ArrivalScreen";
+import type { SoundEventBus } from "@/modules/SoundEventBus";
+import { playReunionSequence } from "@/modules/ReunionSequence";
 
 /**
  * JourneyController — owns the journey state machine and coordinates all
@@ -35,6 +37,9 @@ export class JourneyController {
   /** True while the WebGL context is lost and cannot be rendered. */
   private _contextLost: boolean = false;
 
+  /** Track segment changes to fire terrain/camera one-shots. */
+  private _prevSegmentIndex: number = -1;
+
   // Bound listener references retained for removal.
   private readonly _onHoldStart: () => void;
   private readonly _onHoldEnd: () => void;
@@ -57,6 +62,8 @@ export class JourneyController {
     private readonly _arrivalScreen: ArrivalScreen,
     private readonly _app: Application,
     private readonly _onCanvasReveal?: () => void,
+    private readonly _soundBus?: SoundEventBus,
+    private readonly _hudElement?: HTMLElement | null,
   ) {
     // Pre-bind listener callbacks so they can be removed later.
     this._onHoldStart = () => {
@@ -237,8 +244,9 @@ export class JourneyController {
     // Skip rendering while the context is lost.
     if (!this._contextLost) {
       // Cap dt at 0.1 s to prevent a huge position jump after tab visibility loss.
+      // Multiply by camera timeScale — slows both physics and animation together.
       const rawDt = (timestamp - this._lastTimestamp) / 1000;
-      const dt = Math.min(Math.max(0, rawDt), 0.1);
+      const dt = Math.min(Math.max(0, rawDt), 0.1) * this._pixiRenderer.camera.timeScale;
       this._lastTimestamp = timestamp;
 
       // 1. Integrate velocity → position.
@@ -257,6 +265,15 @@ export class JourneyController {
       }
       if (currentSeg) {
         this._pixiRenderer.setGroundLine(currentSeg.descriptor.groundLineRatio);
+
+        // Fire terrain-based one-shots when segment changes (Phase 4 Stage C)
+        const segIdx = currentSeg.descriptor.index;
+        if (segIdx !== this._prevSegmentIndex) {
+          this._prevSegmentIndex = segIdx;
+          const terrain = currentSeg.descriptor.terrain;
+          if (terrain === "water")  this._soundBus?.fire("splash");
+          if (terrain === "dusty")  this._soundBus?.fire("surface-dusty");
+        }
       }
 
       // 3. Render the current frame.
@@ -281,35 +298,41 @@ export class JourneyController {
   /**
    * Transition from `"travelling"` to `"arrived"`.
    *
-   * Side effects:
-   *  - Releases any active hold (velocity → 0).
-   *  - Shows the arrival screen.
-   *  - Unsubscribes input so further hold events are ignored.
+   * Phase 4 Stage D: uses playReunionSequence() to choreograph the ending
+   * instead of showing the arrival screen immediately.
    *
    * Requirements: 1.3
    */
   private _transitionToArrived(): void {
     this._phase = "arrived";
 
-    // Cancel any pending rAF frame.
     if (this._rafHandle !== null) {
       cancelAnimationFrame(this._rafHandle);
       this._rafHandle = null;
     }
 
-    // Stop movement.
     this._velocityModel.releaseHold();
 
-    // Show the arrival overlay with a restart callback.
-    this._arrivalScreen.show(() => {
-      void this._restart();
-    });
-
-    // Unsubscribe input events.
+    // Unsubscribe input events — no movement during the ending.
     this._inputController.off("holdStart", this._onHoldStart);
     this._inputController.off("holdEnd", this._onHoldEnd);
     this._inputController.off("holdStartBack", this._onHoldStartBack);
     this._inputController.off("holdEndBack", this._onHoldEndBack);
+
+    // Phase 4 Stage D — orchestrate the reunion ending sequence.
+    // Falls back to direct show() if no soundBus/atmosphere available (tests).
+    if (this._soundBus) {
+      void playReunionSequence({
+        camera:        this._pixiRenderer.camera,
+        soundBus:      this._soundBus,
+        atmosphere:    this._pixiRenderer["_atmosphericDepth" as keyof typeof this._pixiRenderer] as never,
+        arrivalScreen: this._arrivalScreen,
+        hudElement:    this._hudElement ?? null,
+        onArrived:     () => this._arrivalScreen.show(() => { void this._restart(); }),
+      });
+    } else {
+      this._arrivalScreen.show(() => { void this._restart(); });
+    }
   }
 
   /**

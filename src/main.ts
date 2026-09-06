@@ -23,6 +23,7 @@ import { InputController } from "@/modules/InputController";
 import { ArrivalScreen } from "@/modules/ArrivalScreen";
 import { QualityHUD } from "@/modules/QualityHUD";
 import { JourneyController } from "@/modules/JourneyController";
+import { SoundEventBus } from "@/modules/SoundEventBus";
 
 import type { SegmentDescriptor, SegmentInstance, JourneyState } from "@/types/journey";
 
@@ -157,12 +158,13 @@ async function bootstrap(): Promise<void> {
   };
 
   // ── QualityHUD ──────────────────────────────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  new QualityHUD(
-    document.getElementById("app") ?? document.body,
-    pixiRenderer,
-    journeyState
-  );
+  const hudContainer = document.getElementById("app") ?? document.body;
+  const qualityHud = new QualityHUD(hudContainer, pixiRenderer, journeyState);
+  // Expose the HUD's root element so the reunion sequence can fade it out.
+  const hudElement = qualityHud.buttonElement ?? null;
+
+  // ── SoundEventBus ────────────────────────────────────────────────────────
+  const soundBus = new SoundEventBus();
 
   // 5. Wire JourneyController and start the journey.
   journeyController = new JourneyController(
@@ -175,6 +177,8 @@ async function bootstrap(): Promise<void> {
     arrivalScreen,
     appInstance.app,
     () => appInstance.showCanvas(),
+    soundBus,
+    hudElement,
   );
 
   await journeyController.start();

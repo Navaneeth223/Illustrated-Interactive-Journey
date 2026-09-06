@@ -2,11 +2,12 @@
  * PixiRenderer — composites all scene layers, runs post-process, and owns
  * the cyclist rig plus all Stage A–D subsystems.
  *
- * Stage A: CyclistRig (full jointed rig, replaces the old static Graphics)
- * Stage B: AtmosphericDepth (per-layer blur/desaturate + vertical pointer parallax
- *          + foreground occlusion layer)
- * Stage C: WindSystem, SunMoonActor, DustSystem
- * Stage D: NpcSystem (manifest-driven ambient actors)
+ * Phase 3 Stage A: CyclistRig (full jointed rig)
+ * Phase 3 Stage B: AtmosphericDepth (blur/desaturate + vertical parallax + occlusion)
+ * Phase 3 Stage C: WindSystem, SunMoonActor, DustSystem
+ * Phase 3 Stage D: NpcSystem (manifest-driven ambient actors)
+ * Phase 4 Stage A: CameraSystem wired in — all scene children live inside cameraRoot
+ * Phase 4 Stage B: applyQualitySettings() for Eco mode retrofit
  */
 
 import * as PIXI from "pixi.js";
@@ -19,6 +20,9 @@ import { WindSystem } from "@/modules/WindSystem";
 import { SunMoonActor } from "@/modules/SunMoonActor";
 import { DustSystem } from "@/modules/DustSystem";
 import { NpcSystem } from "@/modules/NpcSystem";
+import { CameraSystem } from "@/modules/CameraSystem";
+import { getQualitySettings } from "@/modules/QualityConfig";
+import type { QualityMode } from "@/modules/QualityConfig";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -42,11 +46,20 @@ export class PixiRenderer {
 
   private readonly _app: PIXI.Application;
 
+  /** Phase 4 Stage A — camera wraps all scene content. */
+  readonly camera: CameraSystem;
+
+  /**
+   * The parent container for all scene children.
+   * In Phase 4 this is camera.cameraRoot; the `scene` local in the constructor
+   * holds a reference to it during setup.
+   */
+
   /** Five parallax layers — sky(0.05×) bg(0.15×) mg(0.35×) nmg(0.6×) fg(1.0×) */
   private readonly _skyContainer: PIXI.Container;
   private readonly _bgContainer:  PIXI.Container;
   private readonly _mgContainer:  PIXI.Container;
-  private readonly _nmgContainer: PIXI.Container;  // near-midground
+  private readonly _nmgContainer: PIXI.Container;  // near-midground (Default only)
   private readonly _fgContainer:  PIXI.Container;
 
   private readonly _addedBg:  Set<PIXI.Sprite> = new Set();
@@ -95,10 +108,15 @@ export class PixiRenderer {
     this._nativeDPR = Math.min(window.devicePixelRatio ?? 1, 2);
     this._app.renderer.resolution = this._nativeDPR;
 
+    // ── Phase 4 Stage A: CameraSystem ─────────────────────────────────────
+    // All scene children go inside camera.cameraRoot, NOT app.stage directly.
+    this.camera = new CameraSystem(app);
+    const scene = this.camera.cameraRoot; // shorthand
+
     // ── Stage C: Wind + Sun/moon (behind everything) ────────────────────
     this.wind     = new WindSystem();
     this._sunMoon = new SunMoonActor(app);
-    this._app.stage.addChild(this._sunMoon.container);
+    scene.addChild(this._sunMoon.container);
 
     // ── Five parallax layer containers ───────────────────────────────────
     this._skyContainer = new PIXI.Container();
@@ -107,11 +125,11 @@ export class PixiRenderer {
     this._nmgContainer = new PIXI.Container();
     this._fgContainer  = new PIXI.Container();
 
-    this._app.stage.addChild(this._skyContainer);
-    this._app.stage.addChild(this._bgContainer);
-    this._app.stage.addChild(this._mgContainer);
-    this._app.stage.addChild(this._nmgContainer);
-    this._app.stage.addChild(this._fgContainer);
+    scene.addChild(this._skyContainer);
+    scene.addChild(this._bgContainer);
+    scene.addChild(this._mgContainer);
+    scene.addChild(this._nmgContainer);
+    scene.addChild(this._fgContainer);
 
     // ── Stage B: atmospheric depth filters ───────────────────────────────
     this._atmosphericDepth = new AtmosphericDepth(app);
@@ -119,19 +137,19 @@ export class PixiRenderer {
 
     // ── Stage D: NPCs (world-space, at foreground level) ──────────────────
     this._npcs = new NpcSystem();
-    this._app.stage.addChild(this._npcs.container);
+    scene.addChild(this._npcs.container);
 
     // ── Stage A: cyclist rig ─────────────────────────────────────────────
     this._cyclistRig = new CyclistRig();
-    this._app.stage.addChild(this._cyclistRig.parts.root);
+    scene.addChild(this._cyclistRig.parts.root);
     this._positionCyclist();
 
     // ── Stage B: occlusion layer (above cyclist) ──────────────────────────
-    this._app.stage.addChild(this._atmosphericDepth.occlusionContainer);
+    scene.addChild(this._atmosphericDepth.occlusionContainer);
 
     // ── Stage C: dust particles (above occlusion) ─────────────────────────
     this._dust = new DustSystem();
-    this._app.stage.addChild(this._dust.container);
+    scene.addChild(this._dust.container);
 
     // ── Animated grain (TilingSprite) ────────────────────────────────────
     const grainTex = this._generateGrainTexture();
@@ -142,7 +160,7 @@ export class PixiRenderer {
     });
     grainSprite.blendMode = "multiply";
     grainSprite.alpha = 0.42;
-    this._app.stage.addChild(grainSprite);
+    scene.addChild(grainSprite);
 
     // ── Grayscale filter ─────────────────────────────────────────────────
     const grayscaleFilter = new PIXI.ColorMatrixFilter();
@@ -199,7 +217,7 @@ void main(void) {
       resources: { vignetteUniforms },
     });
 
-    this._app.stage.filters = [grayscaleFilter, vignetteFilter];
+    scene.filters = [grayscaleFilter, vignetteFilter];
 
     this.postProcess = {
       grainSprite: grainSprite as unknown as PIXI.Sprite,
@@ -269,7 +287,10 @@ void main(void) {
       if (segIdx !== this._currentSegmentIndex) {
         this._currentSegmentIndex = segIdx;
         this._npcs.loadSegment(currentSeg.descriptor, this._app.screen.height * this._groundLineRatio);
-        // Sync sun/moon and dust terrain
+        // Sync camera profile when segment changes (Phase 4 Stage A)
+        if (currentSeg.descriptor.camera) {
+          this.camera.applyProfile(currentSeg.descriptor.camera);
+        }
         if (currentSeg.descriptor.timeOfDay) {
           this._sunMoon.transitionTo(currentSeg.descriptor.timeOfDay);
         }
@@ -289,16 +310,60 @@ void main(void) {
     }
   }
 
-  setQualityMode(mode: "default" | "eco"): void {
+  /**
+   * Phase 4 Stage B — full quality retrofit.
+   * Every Phase 3 system checks this setting.
+   */
+  setQualityMode(mode: QualityMode): void {
+    const q = getQualitySettings(mode);
+
+    // ── Renderer resolution ───────────────────────────────────────────────
+    this._app.renderer.resolution = mode === "eco"
+      ? 1
+      : Math.min(window.devicePixelRatio ?? 1, this._nativeDPR);
+
+    // ── Textures ──────────────────────────────────────────────────────────
     if (mode === "eco") {
-      this._app.renderer.resolution = 1;
-      this.postProcess.grainSprite.visible = false;
       this._reloadTexturesAtHalfResolution();
     } else {
-      this._app.renderer.resolution = Math.min(window.devicePixelRatio ?? 1, this._nativeDPR);
-      this.postProcess.grainSprite.visible = true;
       this._reloadTexturesAtFullResolution();
     }
+
+    // ── Grain ─────────────────────────────────────────────────────────────
+    this.postProcess.grainSprite.visible = mode !== "eco";
+    if (mode === "eco") {
+      // Flat 10% opacity white in Eco (no noise tile cost)
+      this.postProcess.grainSprite.alpha  = 0.10;
+      this.postProcess.grainSprite.texture = PIXI.Texture.WHITE;
+    } else {
+      this.postProcess.grainSprite.alpha = 0.42;
+      this.postProcess.grainSprite.visible = true;
+    }
+
+    // ── Atmospheric blur (Phase 3 Stage B) ────────────────────────────────
+    if (!q.blurFiltersEnabled) {
+      // Remove blur filters; keep desaturate-only
+      this._bgContainer.filters = [this._atmosphericDepth.bgFilters[1]].filter(Boolean);
+      this._mgContainer.filters = [this._atmosphericDepth.mgFilters[1]].filter(Boolean);
+    } else {
+      this._atmosphericDepth.applyFilters(this._bgContainer, this._mgContainer);
+    }
+
+    // ── Near-midground layer (skip in Eco) ────────────────────────────────
+    this._nmgContainer.visible = q.layerCount === 5;
+
+    // ── Dust pool cap ─────────────────────────────────────────────────────
+    // DustSystem respects terrain check; in eco mode we just set terrain=normal
+    // which keeps pool idle — no new pool creation needed
+    if (mode === "eco") this._dust.setTerrain("normal");
+
+    // ── Vertical parallax ─────────────────────────────────────────────────
+    // AtmosphericDepth always runs applyVerticalParallax; in Eco we set
+    // base Y values to 0 so the method becomes a no-op visually
+    if (!q.verticalParallaxEnabled) {
+      this._atmosphericDepth.setBaseYValues(0, 0, 0);
+    }
+
     this._app.renderer.resize(this._app.screen.width, this._app.screen.height);
   }
 
@@ -316,6 +381,7 @@ void main(void) {
     }
     this._positionCyclist();
     this._sunMoon.handleResize(this._app.screen.width, this._app.screen.height);
+    this.camera.handleResize(this._app.screen.width, this._app.screen.height);
   }
 
   get appliedDPR(): number {
@@ -394,3 +460,5 @@ void main(void) {
     }
   }
 }
+
+

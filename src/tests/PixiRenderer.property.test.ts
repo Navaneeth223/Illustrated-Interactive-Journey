@@ -1310,7 +1310,7 @@ describe("PixiRenderer — Property 14: Eco Quality halves texture dimensions", 
             );
 
             const segment = makeSegmentInstanceWithDimensions("seg-00", 0, widthPx, heightPx);
-            renderer.render(0, [segment]);
+            renderer.render(0, 0, [segment]);
             renderer.setQualityMode("eco");
 
             const bgTex = (segment.bgSprite as unknown as { texture: { width: number; height: number } }).texture;
@@ -1364,7 +1364,7 @@ describe("PixiRenderer — Property 14: Eco Quality halves texture dimensions", 
             );
 
             const segment = makeSegmentInstanceWithDimensions("seg-00", 0, widthPx, heightPx);
-            renderer.render(0, [segment]);
+            renderer.render(0, 0, [segment]);
 
             // Eco → halved
             renderer.setQualityMode("eco");
@@ -1421,7 +1421,7 @@ describe("PixiRenderer — Property 14: Eco Quality halves texture dimensions", 
             );
 
             const segment = makeSegmentInstanceWithDimensions("seg-00", 0, widthPx, heightPx);
-            renderer.render(0, [segment]);
+            renderer.render(0, 0, [segment]);
 
             // First eco switch
             renderer.setQualityMode("eco");
@@ -1997,6 +1997,7 @@ describe("PixiRenderer — Property 16: Eco → Default round trip restores full
     }
   );
 });
+
 
 
 

@@ -22,6 +22,8 @@ export interface SegmentDescriptor {
   terrain?: "normal" | "dusty" | "water";
   /** Time of day — drives sun/moon position and bird density */
   timeOfDay?: "dawn" | "day" | "dusk" | "night";
+  /** Camera framing profile for this segment */
+  camera?: "default" | "wide" | "tight";
   /** Ambient actors defined per-segment */
   npcs?: NpcDescriptor[];
 }
