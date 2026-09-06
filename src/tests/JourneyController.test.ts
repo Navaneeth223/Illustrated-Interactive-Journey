@@ -86,6 +86,17 @@ function makePixiRenderer() {
   return {
     render: vi.fn(),
     setQualityMode: vi.fn(),
+    setGroundLine: vi.fn(),
+    // Phase 4 Stage A — camera stub with timeScale getter
+    camera: {
+      timeScale: 1,
+      applyProfile: vi.fn(),
+      pushIn: vi.fn(),
+      shake: vi.fn(),
+      setTimeScale: vi.fn(),
+      handleResize: vi.fn(),
+      cameraRoot: { addChild: vi.fn() },
+    },
   };
 }
 

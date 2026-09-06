@@ -161,7 +161,7 @@ async function bootstrap(): Promise<void> {
   const hudContainer = document.getElementById("app") ?? document.body;
   const qualityHud = new QualityHUD(hudContainer, pixiRenderer, journeyState);
   // Expose the HUD's root element so the reunion sequence can fade it out.
-  const hudElement = qualityHud.buttonElement ?? null;
+  const hudElement = qualityHud.button ?? null;
 
   // ── SoundEventBus ────────────────────────────────────────────────────────
   const soundBus = new SoundEventBus();

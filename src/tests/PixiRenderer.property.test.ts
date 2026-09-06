@@ -185,6 +185,95 @@ vi.mock("howler", () => ({
   })),
 }));
 
+// Mock CameraSystem — wraps scene children in a stub cameraRoot container.
+// This prevents CameraSystem from requiring a full PIXI.Application.
+vi.mock("@/modules/CameraSystem", () => ({
+  CameraSystem: class {
+    readonly cameraRoot = new StubContainer();
+    readonly timeScale = 1;
+    applyProfile() {}
+    pushIn() {}
+    shake() {}
+    setTimeScale() {}
+    handleResize() {}
+    destroy() {}
+  },
+}));
+
+// Mock WindSystem — no GSAP dependency in tests.
+vi.mock("@/modules/WindSystem", () => ({
+  WindSystem: class {
+    get intensity() { return 0.3; }
+    destroy() {}
+  },
+}));
+
+// Mock SunMoonActor — no canvas/PIXI needed.
+vi.mock("@/modules/SunMoonActor", () => ({
+  SunMoonActor: class {
+    readonly container = new StubContainer();
+    transitionTo() {}
+    update() {}
+    handleResize() {}
+  },
+}));
+
+// Mock DustSystem.
+vi.mock("@/modules/DustSystem", () => ({
+  DustSystem: class {
+    readonly container = new StubContainer();
+    setTerrain() {}
+    update() {}
+    destroy() {}
+  },
+}));
+
+// Mock NpcSystem.
+vi.mock("@/modules/NpcSystem", () => ({
+  NpcSystem: class {
+    readonly container = new StubContainer();
+    loadSegment() {}
+    update() {}
+    destroy() {}
+  },
+}));
+
+// Mock AtmosphericDepth.
+vi.mock("@/modules/AtmosphericDepth", () => ({
+  AtmosphericDepth: class {
+    readonly bgFilters: unknown[] = [];
+    readonly mgFilters: unknown[] = [];
+    readonly occlusionContainer = new StubContainer();
+    applyFilters() {}
+    setBaseYValues() {}
+    applyVerticalParallax() {}
+    updateOcclusion() {}
+    destroy() {}
+  },
+}));
+
+// Mock CyclistRig.
+vi.mock("@/modules/CyclistRig", () => ({
+  CyclistRig: class {
+    readonly parts = {
+      root:          new StubContainer(),
+      torso:         new StubContainer(),
+      head:          new StubGraphics(),
+      frontWheel:    new StubGraphics(),
+      backWheel:     new StubGraphics(),
+      upperLegFront: new StubContainer(),
+      lowerLegFront: new StubContainer(),
+      upperLegBack:  new StubContainer(),
+      lowerLegBack:  new StubContainer(),
+      upperArmFront: new StubContainer(),
+      lowerArmFront: new StubContainer(),
+      upperArmBack:  new StubContainer(),
+      lowerArmBack:  new StubContainer(),
+    };
+    update() {}
+  },
+}));
+
 // ---------------------------------------------------------------------------
 // Imports — placed AFTER vi.mock() so the mock is active when PixiRenderer is
 // loaded by the module system.
@@ -438,7 +527,7 @@ describe("PixiRenderer — Property 7: Layer depth order is never reversed", () 
           renderer.render(worldPosition, 0, segments);
 
           // Locate each layer container in the stage children array
-          const children = app.stage.children;
+          const children = (renderer.sceneRoot as unknown as InstanceType<typeof StubContainer>).children;
           const bgIndex = children.indexOf(renderer.bgContainer);
           const mgIndex = children.indexOf(renderer.mgContainer);
           const fgIndex = children.indexOf(renderer.fgContainer);
@@ -468,7 +557,7 @@ describe("PixiRenderer — Property 7: Layer depth order is never reversed", () 
       );
 
       const getOrder = () => {
-        const children = app.stage.children;
+        const children = (renderer.sceneRoot as unknown as InstanceType<typeof StubContainer>).children;
         return {
           bgIndex: children.indexOf(renderer.bgContainer),
           mgIndex: children.indexOf(renderer.mgContainer),
@@ -549,7 +638,7 @@ describe("PixiRenderer — Property 12: Grayscale filter is applied to all scene
           //
           // stage.filters must be a non-null array that contains at least
           // one ColorMatrixFilter (identified by `_isColorMatrixFilter`).
-          const filters = app.stage.filters;
+          const filters = (renderer.sceneRoot as unknown as InstanceType<typeof StubContainer>).filters as unknown[];
 
           expect(filters).not.toBeNull();
           expect(Array.isArray(filters)).toBe(true);
@@ -590,7 +679,7 @@ describe("PixiRenderer — Property 12: Grayscale filter is applied to all scene
 
           renderer.render(worldPosition, 0, segments);
 
-          const filters = app.stage.filters as unknown[];
+          const filters = (renderer.sceneRoot as unknown as InstanceType<typeof StubContainer>).filters as unknown[];
 
           // The postProcess.grayscaleFilter must appear in stage.filters
           expect(filters).toContain(renderer.postProcess.grayscaleFilter);
@@ -623,7 +712,7 @@ describe("PixiRenderer — Property 12: Grayscale filter is applied to all scene
             renderer.render(baseWorldPosition + i * 100, 0, segments);
           }
 
-          const filters = app.stage.filters as unknown[];
+          const filters = (renderer.sceneRoot as unknown as InstanceType<typeof StubContainer>).filters as unknown[];
           const hasColorMatrixFilter = filters.some(
             (f) => f instanceof StubColorMatrixFilter
           );
@@ -814,7 +903,7 @@ describe("PixiRenderer — Property 13: Post-process pipeline order", () => {
 
           renderer.render(worldPosition, 0, segments);
 
-          const children = app.stage.children;
+          const children = (renderer.sceneRoot as unknown as InstanceType<typeof StubContainer>).children;
 
           // Locate each layer container and the grain sprite in stage.children
           const bgIndex = children.indexOf(renderer.bgContainer);
@@ -867,7 +956,7 @@ describe("PixiRenderer — Property 13: Post-process pipeline order", () => {
 
           renderer.render(worldPosition, 0, segments);
 
-          const filters = app.stage.filters as unknown[];
+          const filters = (renderer.sceneRoot as unknown as InstanceType<typeof StubContainer>).filters as unknown[];
 
           expect(filters).not.toBeNull();
           expect(Array.isArray(filters)).toBe(true);
@@ -923,7 +1012,7 @@ describe("PixiRenderer — Property 13: Post-process pipeline order", () => {
             renderer.render(baseWorldPosition + i * 100, 0, segments);
           }
 
-          const children = app.stage.children;
+          const children = (renderer.sceneRoot as unknown as InstanceType<typeof StubContainer>).children;
           const bgIndex = children.indexOf(renderer.bgContainer);
           const mgIndex = children.indexOf(renderer.mgContainer);
           const fgIndex = children.indexOf(renderer.fgContainer);
@@ -934,7 +1023,7 @@ describe("PixiRenderer — Property 13: Post-process pipeline order", () => {
           expect(grainIndex).toBeGreaterThan(fgIndex);
 
           // Filters must still be intact
-          const filters = app.stage.filters as unknown[];
+          const filters = (renderer.sceneRoot as unknown as InstanceType<typeof StubContainer>).filters as unknown[];
           expect(filters).toContain(renderer.postProcess.grayscaleFilter);
           expect(filters).toContain(renderer.postProcess.vignetteFilter);
         }),
@@ -1997,6 +2086,9 @@ describe("PixiRenderer — Property 16: Eco → Default round trip restores full
     }
   );
 });
+
+
+
 
 
 

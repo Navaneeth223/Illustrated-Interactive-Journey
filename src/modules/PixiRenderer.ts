@@ -390,9 +390,11 @@ void main(void) {
 
   // ── Accessors for tests ───────────────────────────────────────────────────
 
-  get bgContainer():  PIXI.Container { return this._bgContainer; }
-  get mgContainer():  PIXI.Container { return this._mgContainer; }
-  get fgContainer():  PIXI.Container { return this._fgContainer; }
+  get bgContainer():   PIXI.Container { return this._bgContainer; }
+  get mgContainer():   PIXI.Container { return this._mgContainer; }
+  get fgContainer():   PIXI.Container { return this._fgContainer; }
+  /** The container that holds all scene children (camera.cameraRoot). */
+  get sceneRoot():     PIXI.Container { return this.camera.cameraRoot; }
 
   // ── Private helpers ───────────────────────────────────────────────────────
 
