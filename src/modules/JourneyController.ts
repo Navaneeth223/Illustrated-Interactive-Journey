@@ -277,7 +277,7 @@ export class JourneyController {
       }
 
       // 3. Render the current frame.
-      this._pixiRenderer.render(pos, this._velocityModel.velocity, this._sequencer.activeSegments);
+      this._pixiRenderer.render(pos, this._velocityModel.velocity, this._sequencer.activeSegments, dt);
 
       // 4. Notify audio of motion state.
       this._audioController.setMotionState(this._velocityModel.velocity > 0);

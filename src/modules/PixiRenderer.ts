@@ -76,6 +76,9 @@ export class PixiRenderer {
   private _grainOffsetX: number = 0;
   private _grainOffsetY: number = 0;
 
+  /** Real dt from last frame — passed to CyclistRig so lean easing is accurate. */
+  private _lastDt: number = 1 / 60;
+
   // Stage A — jointed rig
   private readonly _cyclistRig: CyclistRig;
 
@@ -233,8 +236,10 @@ void main(void) {
    * @param worldPosition  Scroll position in world pixels.
    * @param velocity       Current velocity from VelocityModel (signed px/s).
    * @param segments       Active segment instances.
+   * @param dt             Elapsed seconds since last frame (for time-correct animation).
    */
-  render(worldPosition: number, velocity: number, segments: SegmentInstance[]): void {
+  render(worldPosition: number, velocity: number, segments: SegmentInstance[], dt = 1 / 60): void {
+    this._lastDt = Math.min(dt, 0.1); // cap same as JourneyController
     // ── Parallax horizontal positioning ──────────────────────────────────
     this._skyContainer.x = (-worldPosition * 0.05)  || 0;
     this._bgContainer.x  = (-worldPosition * 0.15)  || 0;
@@ -269,8 +274,9 @@ void main(void) {
       }
     }
 
-    // ── Stage A: animate cyclist ──────────────────────────────────────────
-    this._cyclistRig.update(velocity, 1 / 60);
+    // ── Stage A: animate cyclist — pass REAL dt, not hardcoded 1/60 ─────────
+    // Previously hardcoded 1/60 broke the time-normalised lean easing fix.
+    this._cyclistRig.update(velocity, this._lastDt);
 
     // ── Stage C: sun/moon ─────────────────────────────────────────────────
     this._sunMoon.update();
@@ -278,7 +284,7 @@ void main(void) {
     // ── Stage C: dust (emit near rear wheel contact) ──────────────────────
     const rearWheelScreenX = this._cyclistRig.parts.root.x - 28 * 1.6;
     const rearWheelScreenY = this._cyclistRig.parts.root.y;
-    this._dust.update(velocity, 1 / 60, rearWheelScreenX, rearWheelScreenY);
+    this._dust.update(velocity, this._lastDt, rearWheelScreenX, rearWheelScreenY);
 
     // ── Stage D: NPCs ─────────────────────────────────────────────────────
     const currentSeg = this._getCurrentSegment(worldPosition, segments);
@@ -298,7 +304,7 @@ void main(void) {
           this._dust.setTerrain(currentSeg.descriptor.terrain);
         }
       }
-      this._npcs.update(1 / 60, worldPosition, currentSeg.worldX);
+      this._npcs.update(this._lastDt, worldPosition, currentSeg.worldX);
     }
 
     // ── Animate grain ─────────────────────────────────────────────────────

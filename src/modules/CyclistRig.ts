@@ -1,70 +1,95 @@
 /**
- * CyclistRig — a fully-jointed paper-cutout character rig.
+ * CyclistRig — jointed paper-cutout character rig with 3D depth illusion.
  *
- * Bug fixes applied:
- *   1. Lean easing is now time-normalised: 1 - (1-α)^(dt*60)
- *      so it converges identically at 30fps and 120fps.
- *   2. Direction-flip (TURNING state): when velocity crosses zero, the rig
- *      plays a short skid/pivot — scaleX tweens to 0, flips, tweens back to 1
- *      — before the world starts scrolling in the new direction.
- *   3. Debug-color mode: set DEBUG_COLORS = true to assign each part a
- *      distinct hue so joint positioning can be verified visually.
+ * 3D depth cues applied (all achievable with flat 2D shapes):
+ *
+ * 1. Tonal separation — back limbs are LIGHTER (farther away = more atmospheric
+ *    haze), front limbs are DARKER (closest to viewer). This is the opposite of
+ *    the old version which made both the same dark color.
+ *
+ * 2. Rim lighting — a lighter stroke on the near (right) edge of the torso and
+ *    legs simulates light catching the form edge, lifting it off the background.
+ *
+ * 3. Ground shadow — a flat oval below the rear wheel gives the figure a base
+ *    and stops it floating. Scales slightly with speed.
+ *
+ * 4. Perspective wheel sizing — rear wheel is 2px smaller radius than front,
+ *    simulating very slight 3/4 view angle.
+ *
+ * 5. Torso taper — wider at chest (shoulders), narrower at waist, rather than
+ *    a uniform rectangle. Reads as a body, not a plank.
+ *
+ * Bug fixes:
+ *   - Lean easing is time-normalised: 1-(1-α)^(dt*60) — no more jitter
+ *   - Direction-flip plays squish-pivot animation, no instant reversal
+ *   - DEBUG_COLORS flag for joint-position verification
  */
 
 import * as PIXI from "pixi.js";
 import { gsap } from "gsap";
 
 // ---------------------------------------------------------------------------
-// Debug flag — set true to assign each part a distinct color
+// Debug mode
 // ---------------------------------------------------------------------------
 const DEBUG_COLORS = false;
 
 const DBG = {
-  torso:       0xff2222, // red
-  head:        0xff8800, // orange
-  upperLegF:   0xffff00, // yellow
-  lowerLegF:   0x88ff00, // lime
-  upperLegB:   0x00ffcc, // teal
-  lowerLegB:   0x0088ff, // blue
-  upperArmF:   0xcc00ff, // purple
-  lowerArmF:   0xff00aa, // pink
-  upperArmB:   0x00ff44, // green
-  lowerArmB:   0xffffff, // white
-  frame:       0x888888, // grey
-  wheel:       0x444444, // dark grey
+  shadow:      0x222200,
+  backWheel:   0x0000ff,
+  upperLegB:   0x00aaff, // back = light blue
+  lowerLegB:   0x0066ff,
+  frame:       0x888888,
+  frontWheel:  0xff0000,
+  upperLegF:   0xff6600, // front = warm
+  lowerLegF:   0xff9900,
+  torso:       0xff2222,
+  head:        0xff8800,
+  upperArmB:   0x00ff88,
+  lowerArmB:   0x00ffcc,
+  upperArmF:   0xcc00ff,
+  lowerArmF:   0xff00aa,
 };
 
+function col(key: keyof typeof DBG, fallback: number): number {
+  return DEBUG_COLORS ? DBG[key] : fallback;
+}
+
 // ---------------------------------------------------------------------------
-// Production colors (achromatic graphite)
+// Achromatic palette — LIGHTER = farther back, DARKER = closer
 // ---------------------------------------------------------------------------
-const DARK  = 0x1a1814;
-const MID   = 0x3a3530;
-const LIGHT = 0x7a7570;
+const VERY_DARK = 0x111009;  // front limbs, deepest shadow
+const DARK      = 0x1a1814;  // frame, structural elements
+const MID_DARK  = 0x2e2a26;  // mid-distance elements
+const MID       = 0x3e3a36;  // back limbs (lighter = receding)
+const MID_LIGHT = 0x5a5652;  // back wheel (furthest back = lightest)
+const LIGHT     = 0x7a7570;  // highlights, rim light strokes
+const RIM       = 0x9a9690;  // brightest rim light
 
 // ---------------------------------------------------------------------------
 // Rig constants
 // ---------------------------------------------------------------------------
-const WHEEL_RADIUS  = 24;
+const FRONT_WHEEL_R = 24;   // front wheel — slightly larger (3/4 view)
+const BACK_WHEEL_R  = 22;   // rear wheel  — slightly smaller (perspective)
 const SPOKE_COUNT   = 8;
-const UPPER_LEG_LEN = 24;
-const LOWER_LEG_LEN = 22;
-const UPPER_ARM_LEN = 16;
-const LOWER_ARM_LEN = 14;
+
+const UPPER_LEG_LEN = 26;
+const LOWER_LEG_LEN = 23;
+const UPPER_ARM_LEN = 18;
+const LOWER_ARM_LEN = 15;
 
 // Animation tuning
-const PEDAL_RATE  = 0.0042;  // legPhase per px travelled
-const WHEEL_RATE  = 0.031;   // wheel rotation per px travelled
-const LEG_SWING   = 0.75;    // upper-leg amplitude (rad)
-const KNEE_BEND   = 0.95;    // lower-leg max bend
-const KNEE_OFFSET = 0.85;    // phase offset for knee
-const ARM_SWING   = 0.22;    // upper-arm amplitude
-const LEAN_ALPHA  = 0.07;    // lean smoothing factor (per 60fps frame equivalent)
-const LEAN_SCALE  = 9000;    // acceleration → lean divisor
-const LEAN_MAX    = 0.13;    // lean clamp (rad)
-const BOB_AMP     = 3.5;     // max body-bob px
+const PEDAL_RATE  = 0.0042;
+const WHEEL_RATE  = 0.031;
+const LEG_SWING   = 0.78;
+const KNEE_BEND   = 0.95;
+const KNEE_OFFSET = 0.88;
+const ARM_SWING   = 0.20;
+const LEAN_ALPHA  = 0.07;
+const LEAN_SCALE  = 9000;
+const LEAN_MAX    = 0.13;
+const BOB_AMP     = 3.5;
 
-// Direction-flip animation
-const FLIP_DURATION = 0.18;  // seconds to squish-then-flip
+const FLIP_DURATION = 0.18;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,32 +99,39 @@ function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-function col(key: keyof typeof DBG, fallback: number): number {
-  return DEBUG_COLORS ? DBG[key] : fallback;
-}
-
-function drawWheel(g: PIXI.Graphics): void {
-  const c = col("wheel", DARK);
-  const s = col("wheel", MID);
-  g.circle(0, 0, WHEEL_RADIUS).stroke({ color: c, width: 4 });
-  g.circle(0, 0, 5).fill(c);
+function drawWheel(g: PIXI.Graphics, radius: number, rimColor: number, spokeColor: number): void {
+  // Tyre
+  g.circle(0, 0, radius).stroke({ color: rimColor, width: 4 });
+  // Hub
+  g.circle(0, 0, 5).fill(rimColor);
+  // Spokes
   for (let i = 0; i < SPOKE_COUNT; i++) {
     const a = (i / SPOKE_COUNT) * Math.PI * 2;
     g.moveTo(0, 0)
-      .lineTo(Math.cos(a) * (WHEEL_RADIUS - 3), Math.sin(a) * (WHEEL_RADIUS - 3))
-      .stroke({ color: s, width: 1.5 });
+      .lineTo(Math.cos(a) * (radius - 3), Math.sin(a) * (radius - 3))
+      .stroke({ color: spokeColor, width: 1.2 });
   }
 }
 
+/**
+ * Draw a rounded limb with optional rim-light on the leading edge.
+ */
 function drawLimb(
   g: PIXI.Graphics,
   length: number,
   thickness: number,
-  color: number,
+  fillColor: number,
   endDot = 0,
+  rimLight = false,
 ): void {
-  g.roundRect(-thickness / 2, 0, thickness, length, thickness / 2).fill(color);
-  if (endDot > 0) g.circle(0, length, endDot).fill(color);
+  g.roundRect(-thickness / 2, 0, thickness, length, thickness / 2).fill(fillColor);
+  if (endDot > 0) g.circle(0, length, endDot).fill(fillColor);
+  if (rimLight) {
+    // Right-edge highlight strip — simulates light catching the near face
+    g.moveTo(thickness / 2 - 1.5, thickness / 2)
+      .lineTo(thickness / 2 - 1.5, length - thickness / 2)
+      .stroke({ color: RIM, width: 1.5, alpha: 0.7 });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +152,7 @@ export interface RigParts {
   lowerLegBack:   PIXI.Container;
   frontWheel:     PIXI.Graphics;
   backWheel:      PIXI.Graphics;
+  shadow:         PIXI.Graphics;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +162,6 @@ export interface RigParts {
 export class CyclistRig {
   readonly parts: RigParts;
 
-  // Animation state
   private _legPhase:    number  = 0;
   private _prevVel:     number  = 0;
   private _currentLean: number  = 0;
@@ -140,99 +172,66 @@ export class CyclistRig {
     this.parts = this._buildRig();
   }
 
-  // ── Public API ──────────────────────────────────────────────────────────
-
-  /**
-   * Advance the rig by one frame.
-   *
-   * @param velocity  Current world velocity px/s (signed — negative = backward).
-   * @param dt        Elapsed seconds since last frame.
-   */
   update(velocity: number, dt: number): void {
-    if (this._flipping) return; // freeze animation during the flip squish
+    if (this._flipping) return;
 
     const { root, torso, head,
             upperLegFront, lowerLegFront,
             upperLegBack,  lowerLegBack,
             upperArmFront, upperArmBack,
-            frontWheel,    backWheel } = this.parts;
+            frontWheel,    backWheel,
+            shadow } = this.parts;
 
     const absSpeed = Math.abs(velocity);
 
-    // ── Direction flip detection ──────────────────────────────────────────
-    // When velocity crosses zero (previous frame same sign, this frame
-    // opposite sign), play the squish-flip animation rather than instantly
-    // reversing.
-    const wasPosOrZero = this._prevVel >= 0;
-    const wasSameSign  = this._prevVel <= 0 === velocity <= 0;
-
+    // Direction flip detection
+    const wasSameSign = (this._prevVel <= 0) === (velocity <= 0);
     if (!wasSameSign && absSpeed > 20) {
-      // Velocity just crossed zero with meaningful speed → play flip.
-      const targetDir = velocity < 0 ? -1 : 1;
-      this._playFlip(targetDir);
+      this._playFlip(velocity < 0 ? -1 : 1);
     }
 
-    // Determine facing for phase direction
-    const dir = this._facingRight ? 1 : -1;
+    // Phase accumulation — distance-driven, always positive
+    this._legPhase += absSpeed * dt * PEDAL_RATE;
 
-    // ── Phase accumulation ─────────────────────────────────────────────────
-    // Always advance by |velocity| so legs always pedal forward regardless
-    // of travel direction. The rig's scaleX handles visual facing.
-    this._legPhase += Math.abs(velocity) * dt * PEDAL_RATE;
+    // Wheels
+    const wd = absSpeed * dt * WHEEL_RATE;
+    frontWheel.rotation += wd;
+    backWheel.rotation  += wd;
 
-    // ── Wheels ────────────────────────────────────────────────────────────
-    const wheelDelta = Math.abs(velocity) * dt * WHEEL_RATE;
-    frontWheel.rotation += wheelDelta;
-    backWheel.rotation  += wheelDelta;
-
-    // ── Legs ──────────────────────────────────────────────────────────────
+    // Legs
     const lf = this._legPhase;
     const lb = this._legPhase + Math.PI;
-
     upperLegFront.rotation = LEG_SWING  * Math.sin(lf);
     lowerLegFront.rotation = Math.max(0, Math.sin(lf + KNEE_OFFSET)) * KNEE_BEND;
     upperLegBack.rotation  = LEG_SWING  * Math.sin(lb);
     lowerLegBack.rotation  = Math.max(0, Math.sin(lb + KNEE_OFFSET)) * KNEE_BEND;
 
-    // ── Arms ──────────────────────────────────────────────────────────────
+    // Arms
     upperArmFront.rotation = ARM_SWING * Math.sin(lb);
     upperArmBack.rotation  = ARM_SWING * Math.sin(lf);
 
-    // ── Body bob ──────────────────────────────────────────────────────────
+    // Body bob
     const bobT = Math.min(absSpeed / 800, 1);
     torso.y = Math.sin(lf * 2) * BOB_AMP * bobT;
 
-    // ── Head counter-nod ──────────────────────────────────────────────────
+    // Head counter-nod
     head.rotation = -torso.rotation * 0.4;
 
-    // ── Lean — BUG FIX 1: time-normalised easing ──────────────────────────
-    // Old: += (target - current) * 0.07  ← frame-rate dependent (jittery)
-    // New: use exponential smoothing with dt so convergence rate is identical
-    //      at 30fps and 120fps.
-    const accel = dt > 0.001 ? (velocity - this._prevVel) / dt : 0;
+    // Lean — time-normalised exponential smoothing
+    const accel      = dt > 0.001 ? (velocity - this._prevVel) / dt : 0;
     const targetLean = clamp(accel / LEAN_SCALE, -LEAN_MAX, LEAN_MAX);
-    // 1 - (1 - α)^(dt*60) normalises the per-frame factor to real time
-    const leanSmoothing = 1 - Math.pow(1 - LEAN_ALPHA, dt * 60);
-    this._currentLean += (targetLean - this._currentLean) * leanSmoothing;
-    root.rotation = this._currentLean * dir; // lean into travel direction
+    const smoothing  = 1 - Math.pow(1 - LEAN_ALPHA, dt * 60);
+    this._currentLean += (targetLean - this._currentLean) * smoothing;
+    root.rotation = this._currentLean;
 
-    // Suppress unused variable warning from old wasPosOrZero reference
-    void wasPosOrZero;
-    void dir;
+    // Ground shadow — subtle size pulse with speed
+    const shadowScale = 0.9 + 0.15 * Math.min(absSpeed / 800, 1);
+    shadow.scale.x = shadowScale;
+    shadow.alpha   = 0.18 + 0.08 * Math.min(absSpeed / 800, 1);
 
     this._prevVel = velocity;
   }
 
-  // ── Private — direction flip ─────────────────────────────────────────────
-
-  /**
-   * Play a squish-pivot-restore animation when the rider reverses direction.
-   *
-   * Timeline:
-   *   0s       scaleX squishes to 0.1 (pivot/skid visual)
-   *   flipDur  scaleX flips sign (facing changes)
-   *   2×flipDur scaleX restores to 1 (new direction)
-   */
   private _playFlip(newDir: 1 | -1): void {
     if (this._flipping) return;
     this._flipping = true;
@@ -240,151 +239,177 @@ export class CyclistRig {
     const root = this.parts.root;
     const half = FLIP_DURATION / 2;
 
-    // Phase 1: squish to flat
     gsap.to(root.scale, {
       x: 0.1,
       duration: half,
       ease: "power2.in",
       onComplete: () => {
-        // Apply the facing flip at the moment of zero width
         this._facingRight = newDir === 1;
         root.scale.x = 0.1 * newDir;
-
-        // Phase 2: restore to full width in new direction
         gsap.to(root.scale, {
           x: newDir,
           duration: half,
           ease: "power2.out",
-          onComplete: () => {
-            this._flipping = false;
-          },
+          onComplete: () => { this._flipping = false; },
         });
       },
     });
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────
-
   private _buildRig(): RigParts {
     const root = new PIXI.Container();
 
-    // ── Back wheel ───────────────────────────────────────────────────────
+    // ── Ground shadow ─────────────────────────────────────────────────────
+    // Drawn first so it appears below everything else
+    const shadow = new PIXI.Graphics();
+    shadow.ellipse(0, 0, 36, 6).fill({ color: col("shadow", VERY_DARK), alpha: 0.22 });
+    shadow.position.set(0, 4); // just below wheel contact
+    root.addChild(shadow);
+
+    // ── Back wheel (lighter — farther from viewer) ────────────────────────
     const backWheel = new PIXI.Graphics();
-    drawWheel(backWheel);
+    drawWheel(backWheel, BACK_WHEEL_R, col("backWheel", MID_LIGHT), col("backWheel", MID));
     backWheel.position.set(-28, 0);
+    root.addChild(backWheel);
 
-    // ── Front wheel ──────────────────────────────────────────────────────
-    const frontWheel = new PIXI.Graphics();
-    drawWheel(frontWheel);
-    frontWheel.position.set(28, 0);
-
-    // ── Frame ────────────────────────────────────────────────────────────
-    const frameColor = col("frame", DARK);
-    const frame = new PIXI.Graphics();
-    frame.circle(0, -12, 6).fill(frameColor);
-    frame.moveTo(0, -12).lineTo(-28, 0).stroke({ color: frameColor, width: 3 });
-    frame.moveTo(0, -12).lineTo(22, -32).stroke({ color: frameColor, width: 3 });
-    frame.moveTo(0, -12).lineTo(-6, -36).stroke({ color: frameColor, width: 3 });
-    frame.moveTo(-6, -36).lineTo(22, -32).stroke({ color: frameColor, width: 3 });
-    frame.moveTo(22, -32).lineTo(24, -14).stroke({ color: frameColor, width: 4 });
-    frame.moveTo(24, -14).lineTo(28, 0).stroke({ color: frameColor, width: 3 });
-    frame.moveTo(22, -32).lineTo(26, -42).stroke({ color: frameColor, width: 3 });
-    frame.moveTo(26, -42).lineTo(30, -38).stroke({ color: frameColor, width: 3 });
-    frame.moveTo(-16, -38).lineTo(-2, -38).stroke({ color: frameColor, width: 5 });
-
-    // ── Back leg (rendered behind frame) ─────────────────────────────────
+    // ── Back leg (lighter tones — receding depth) ─────────────────────────
     const upperLegBack = new PIXI.Container();
-    const ulbG = new PIXI.Graphics();
-    drawLimb(ulbG, UPPER_LEG_LEN, 7, col("upperLegB", MID));
-    upperLegBack.addChild(ulbG);
-    upperLegBack.position.set(-3, -28);
-
+    {
+      const g = new PIXI.Graphics();
+      drawLimb(g, UPPER_LEG_LEN, 7, col("upperLegB", MID), 0, false);
+      upperLegBack.addChild(g);
+      upperLegBack.position.set(-2, -28);
+    }
     const lowerLegBack = new PIXI.Container();
-    const llbG = new PIXI.Graphics();
-    drawLimb(llbG, LOWER_LEG_LEN, 6, col("lowerLegB", MID), 5);
-    lowerLegBack.addChild(llbG);
-    lowerLegBack.position.set(0, UPPER_LEG_LEN);
-    upperLegBack.addChild(lowerLegBack);
+    {
+      const g = new PIXI.Graphics();
+      drawLimb(g, LOWER_LEG_LEN, 6, col("lowerLegB", MID_DARK), 5, false);
+      lowerLegBack.addChild(g);
+      lowerLegBack.position.set(0, UPPER_LEG_LEN);
+      upperLegBack.addChild(lowerLegBack);
+    }
+    root.addChild(upperLegBack);
 
-    // ── Front leg (rendered in front of frame) ────────────────────────────
+    // ── Frame ─────────────────────────────────────────────────────────────
+    const frame = new PIXI.Graphics();
+    const fc = col("frame", DARK);
+    // Bottom bracket hub
+    frame.circle(0, -12, 7).fill(fc);
+    // Tubes
+    frame.moveTo(0, -12).lineTo(-28,  0).stroke({ color: fc, width: 3 });   // chain stay
+    frame.moveTo(0, -12).lineTo( 22, -34).stroke({ color: fc, width: 3 });  // down tube
+    frame.moveTo(0, -12).lineTo( -6, -38).stroke({ color: fc, width: 3 });  // seat tube
+    frame.moveTo(-6,-38).lineTo( 22, -34).stroke({ color: fc, width: 3 });  // top tube
+    frame.moveTo(22,-34).lineTo( 24, -14).stroke({ color: fc, width: 4 });  // head tube
+    frame.moveTo(24,-14).lineTo( 28,   0).stroke({ color: fc, width: 3 });  // fork
+    // Rim-light highlight on right (front-facing) edge of seat tube
+    frame.moveTo(-5,-36).lineTo(-4,-16).stroke({ color: LIGHT, width: 1.5, alpha: 0.5 });
+    // Handlebar
+    frame.moveTo(22,-34).lineTo(27,-44).stroke({ color: fc, width: 3 });
+    frame.moveTo(27,-44).lineTo(32,-40).stroke({ color: fc, width: 3 });
+    // Saddle (wider at back, tapered forward — reads as a real saddle shape)
+    frame.moveTo(-18, -40).lineTo(-8, -40).stroke({ color: fc, width: 6 });
+    frame.moveTo(-8,  -40).lineTo(-2, -39).stroke({ color: fc, width: 4 });
+    root.addChild(frame);
+
+    // ── Front wheel (darker + larger — closest to viewer) ─────────────────
+    const frontWheel = new PIXI.Graphics();
+    drawWheel(frontWheel, FRONT_WHEEL_R, col("frontWheel", VERY_DARK), col("frontWheel", MID_DARK));
+    frontWheel.position.set(28, 0);
+    root.addChild(frontWheel);
+
+    // ── Front leg (darker tones + rim light — nearest to viewer) ──────────
     const upperLegFront = new PIXI.Container();
-    const ulfG = new PIXI.Graphics();
-    drawLimb(ulfG, UPPER_LEG_LEN, 8, col("upperLegF", DARK));
-    upperLegFront.addChild(ulfG);
-    upperLegFront.position.set(-3, -28);
-
+    {
+      const g = new PIXI.Graphics();
+      drawLimb(g, UPPER_LEG_LEN, 9, col("upperLegF", VERY_DARK), 0, true);
+      upperLegFront.addChild(g);
+      upperLegFront.position.set(-2, -28);
+    }
     const lowerLegFront = new PIXI.Container();
-    const llfG = new PIXI.Graphics();
-    drawLimb(llfG, LOWER_LEG_LEN, 7, col("lowerLegF", DARK), 6);
-    lowerLegFront.addChild(llfG);
-    lowerLegFront.position.set(0, UPPER_LEG_LEN);
-    upperLegFront.addChild(lowerLegFront);
+    {
+      const g = new PIXI.Graphics();
+      drawLimb(g, LOWER_LEG_LEN, 8, col("lowerLegF", DARK), 7, true);
+      lowerLegFront.addChild(g);
+      lowerLegFront.position.set(0, UPPER_LEG_LEN);
+      upperLegFront.addChild(lowerLegFront);
+    }
+    root.addChild(upperLegFront);
 
-    // ── Torso ─────────────────────────────────────────────────────────────
+    // ── Torso (tapered: wider at chest, narrower at waist) ────────────────
     const torso = new PIXI.Container();
-    torso.position.set(-6, -38);
-
-    const torsoG = new PIXI.Graphics();
-    torsoG.roundRect(-5, 0, 10, 22, 5).fill(col("torso", DARK));
-    torsoG.circle(0, 0, 7).fill(col("torso", DARK));
-    torso.addChild(torsoG);
+    torso.position.set(-6, -40);
+    {
+      const g = new PIXI.Graphics();
+      // Tapered body — polygon instead of uniform rect
+      // Points: bottom-center, hip-left, waist-left, shoulder-left,
+      //         shoulder-right, waist-right, hip-right
+      g.poly([
+        -5, 24,   // hip left
+         5, 24,   // hip right
+         6, 16,   // waist right
+        10,  4,   // shoulder right
+       -10,  4,   // shoulder left
+        -6, 16,   // waist left
+      ]).fill(col("torso", DARK));
+      // Rim light on right shoulder/chest edge
+      g.moveTo(10, 4).lineTo(7, 18).stroke({ color: RIM, width: 1.5, alpha: 0.6 });
+      torso.addChild(g);
+    }
+    root.addChild(torso);
 
     // ── Head ──────────────────────────────────────────────────────────────
     const head = new PIXI.Graphics();
     head.circle(0, 0, 10).fill(col("head", DARK));
-    head.arc(0, 0, 10, Math.PI + 0.3, Math.PI * 2 - 0.3)
-      .stroke({ color: LIGHT, width: 2 });
-    head.moveTo(-12, 2).lineTo(12, 2).stroke({ color: MID, width: 3 });
-    head.position.set(0, -12);
+    // Face — subtle lighter area to break up the silhouette
+    head.arc(2, 1, 6, -0.4, Math.PI * 0.6).fill({ color: MID_DARK, alpha: 0.8 });
+    // Helmet arc highlight
+    head.arc(0, -2, 9, Math.PI + 0.5, Math.PI * 2 - 0.2)
+      .stroke({ color: LIGHT, width: 1.8, alpha: 0.7 });
+    // Helmet brim
+    head.moveTo(-13, 3).lineTo(12, 3).stroke({ color: MID_DARK, width: 3 });
+    head.position.set(2, -14);  // sits above torso chest
     torso.addChild(head);
 
     // ── Back arm ──────────────────────────────────────────────────────────
     const upperArmBack = new PIXI.Container();
-    const uabG = new PIXI.Graphics();
-    drawLimb(uabG, UPPER_ARM_LEN, 6, col("upperArmB", MID));
-    upperArmBack.addChild(uabG);
-    upperArmBack.rotation = 0.9;
-    upperArmBack.position.set(2, 2);
-
+    {
+      const g = new PIXI.Graphics();
+      drawLimb(g, UPPER_ARM_LEN, 6, col("upperArmB", MID), 0, false);
+      upperArmBack.addChild(g);
+      upperArmBack.rotation = 0.85;
+      upperArmBack.position.set(4, 6);
+    }
     const lowerArmBack = new PIXI.Container();
-    const labG = new PIXI.Graphics();
-    drawLimb(labG, LOWER_ARM_LEN, 5, col("lowerArmB", MID));
-    lowerArmBack.addChild(labG);
-    lowerArmBack.position.set(0, UPPER_ARM_LEN);
-    lowerArmBack.rotation = 0.3;
-    upperArmBack.addChild(lowerArmBack);
+    {
+      const g = new PIXI.Graphics();
+      drawLimb(g, LOWER_ARM_LEN, 5, col("lowerArmB", MID_DARK), 0, false);
+      lowerArmBack.addChild(g);
+      lowerArmBack.position.set(0, UPPER_ARM_LEN);
+      lowerArmBack.rotation = 0.25;
+      upperArmBack.addChild(lowerArmBack);
+    }
     torso.addChild(upperArmBack);
 
-    // ── Front arm ─────────────────────────────────────────────────────────
+    // ── Front arm (with rim light) ─────────────────────────────────────────
     const upperArmFront = new PIXI.Container();
-    const uafG = new PIXI.Graphics();
-    drawLimb(uafG, UPPER_ARM_LEN, 7, col("upperArmF", DARK));
-    upperArmFront.addChild(uafG);
-    upperArmFront.rotation = 0.9;
-    upperArmFront.position.set(2, 2);
-
+    {
+      const g = new PIXI.Graphics();
+      drawLimb(g, UPPER_ARM_LEN, 7, col("upperArmF", VERY_DARK), 0, true);
+      upperArmFront.addChild(g);
+      upperArmFront.rotation = 0.85;
+      upperArmFront.position.set(4, 6);
+    }
     const lowerArmFront = new PIXI.Container();
-    const lafG = new PIXI.Graphics();
-    drawLimb(lafG, LOWER_ARM_LEN, 6, col("lowerArmF", DARK));
-    lowerArmFront.addChild(lafG);
-    lowerArmFront.position.set(0, UPPER_ARM_LEN);
-    lowerArmFront.rotation = 0.3;
-    upperArmFront.addChild(lowerArmFront);
+    {
+      const g = new PIXI.Graphics();
+      drawLimb(g, LOWER_ARM_LEN, 6, col("lowerArmF", DARK), 0, true);
+      lowerArmFront.addChild(g);
+      lowerArmFront.position.set(0, UPPER_ARM_LEN);
+      lowerArmFront.rotation = 0.25;
+      upperArmFront.addChild(lowerArmFront);
+    }
     torso.addChild(upperArmFront);
-
-    // ── Assemble — strict back-to-front depth order ───────────────────────
-    // upperLegBack  → behind everything
-    // backWheel     → behind frame
-    // frame         → structural mid
-    // frontWheel    → in front of frame
-    // upperLegFront → in front of frame, behind torso
-    // torso         → topmost
-    root.addChild(upperLegBack);
-    root.addChild(backWheel);
-    root.addChild(frame);
-    root.addChild(frontWheel);
-    root.addChild(upperLegFront);
-    root.addChild(torso);
 
     return {
       root, torso, head,
@@ -393,6 +418,7 @@ export class CyclistRig {
       upperLegFront, lowerLegFront,
       upperLegBack,  lowerLegBack,
       frontWheel, backWheel,
+      shadow,
     };
   }
 }
