@@ -172,6 +172,9 @@ export class CyclistRig {
     this.parts = this._buildRig();
   }
 
+  /** True when the rig is facing right (forward). False during/after a leftward flip. */
+  get facingRight(): boolean { return this._facingRight; }
+
   update(velocity: number, dt: number): void {
     if (this._flipping) return;
 
@@ -187,7 +190,9 @@ export class CyclistRig {
     // Direction flip detection
     const wasSameSign = (this._prevVel <= 0) === (velocity <= 0);
     if (!wasSameSign && absSpeed > 20) {
-      this._playFlip(velocity < 0 ? -1 : 1);
+      const newDir = velocity < 0 ? -1 : 1;
+      this._facingRight = newDir === 1; // track for external queries
+      this._playFlip(newDir);
     }
 
     // Phase accumulation — distance-driven, always positive
@@ -235,6 +240,7 @@ export class CyclistRig {
   private _playFlip(newDir: 1 | -1): void {
     if (this._flipping) return;
     this._flipping = true;
+    this._facingRight = newDir === 1; // update facing before animation starts
 
     const root = this.parts.root;
     const half = FLIP_DURATION / 2;
@@ -244,7 +250,6 @@ export class CyclistRig {
       duration: half,
       ease: "power2.in",
       onComplete: () => {
-        this._facingRight = newDir === 1;
         root.scale.x = 0.1 * newDir;
         gsap.to(root.scale, {
           x: newDir,
